@@ -93,7 +93,7 @@ func SummarizeStreak(p *Predictions, s *Streak) (prob, spread float64) {
 }
 
 // MakePredictions uses a schedule and a model to build a map of predictions for fast lookup.
-func MakePredictions(s *Schedule, m PredictionModel) *Predictions {
+func MakePredictions(s *Schedule, m GamePredicter) (*Predictions, error) {
 	tl := s.TeamList()
 	nWeeks := s.NumWeeks()
 
@@ -104,11 +104,16 @@ func MakePredictions(s *Schedule, m PredictionModel) *Predictions {
 		probs[t1] = make([]float64, nWeeks)
 		spreads[t1] = make([]float64, nWeeks)
 		for week := 0; week < nWeeks; week++ {
-			probs[t1][week], spreads[t1][week] = m.Predict(s.Get(t1, week))
+			game := s.Get(t1, week)
+			var err error
+			probs[t1][week], spreads[t1][week], err = game.Predict(m)
+			if err != nil {
+				return nil, fmt.Errorf("cannot make prediction for game: %v", err)
+			}
 		}
 	}
 
-	return &Predictions{probs: probs, spreads: spreads}
+	return &Predictions{probs: probs, spreads: spreads}, nil
 }
 
 func (p Predictions) String() string {

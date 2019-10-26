@@ -35,7 +35,7 @@ type Game struct {
 }
 
 // NULLGAME represents a game that doesn't exsit.  Go figure.
-var NULLGAME = Game{NONE, NONE, Neutral}
+var NULLGAME = Game{}
 
 // NewGame makes a game between two teams.
 func NewGame(team1, team2 Team, locRelTeam1 RelativeLocation) *Game {
@@ -64,4 +64,9 @@ func (g *Game) LocationRelativeToTeam(t int) RelativeLocation {
 	default:
 		panic(fmt.Errorf("team %d is not a valid team", t))
 	}
+}
+
+// Predict implements Predictable interface.
+func (g *Game) Predict(p GamePredicter) (prob float64, spread float64, err error) {
+	return p.Predict(g.team1, g.team2, g.location)
 }

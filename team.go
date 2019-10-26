@@ -6,7 +6,7 @@ import (
 
 // Team play game against Team.
 type Team struct {
-	Name4 string `firestore:"name_4"`
+	Name4 string
 }
 
 // TeamList implements the sort.Interface interface and represents a list of Teams.
@@ -16,24 +16,24 @@ type TeamList []Team
 var BYE = Team{Name4: "BYE"}
 
 // NONE represents a null pick--used when a player uses a pick bye on a week.
-var NONE = Team{Name4: "----"}
+var NONE = Team{}
 
 // Name gets the team name
 func (t Team) Name() string {
 	return t.Name4
 }
 
-// Len calculates the length of the TeamList (implements sort.Interface interface)
+// Len calculates the length of the TeamList (implements sort.Interface)
 func (t TeamList) Len() int {
 	return len(t)
 }
 
-// Less reports whether (implements sort.Interface interface)
+// Less reports whether one team should be sorted before another (implements sort.Interface)
 func (t TeamList) Less(i, j int) bool {
 	return t[i].Name() < t[j].Name()
 }
 
-// Swap swaps the elements with indexes i and j (implements sort.Interface interface)
+// Swap swaps the elements with indexes i and j (implements sort.Interface)
 func (t TeamList) Swap(i, j int) {
 	t[i], t[j] = t[j], t[i]
 }

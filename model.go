@@ -40,11 +40,11 @@ func NewGaussianSpreadModel(ratings map[Team]float64, stdDev, homeBias, closeBia
 
 // Predict returns the probability and spread for team1.
 func (m *GaussianSpreadModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float64, error) {
-	if t2 == BYE || t2 == NONE {
+	if t2 == NONE {
 		// The first team has a bye week, so wins automatically.
 		return 1., 0., nil
 	}
-	if t1 == BYE || t1 == NONE {
+	if t1 == NONE {
 		// The second team has a bye week, so wins automatically.
 		return 0., 0., nil
 	}
@@ -62,7 +62,7 @@ func (m GaussianSpreadModel) spread(t1, t2 Team, loc RelativeLocation) (float64,
 	if !ok {
 		return 0., fmt.Errorf("team 1 '%s' has no rating", t1.Name())
 	}
-	r2, ok := m.ratings[t1]
+	r2, ok := m.ratings[t2]
 	if !ok {
 		return 0., fmt.Errorf("team 2 '%s' has no rating", t2.Name())
 	}
