@@ -1,4 +1,4 @@
-package bts
+package pickem
 
 import (
 	"encoding/csv"

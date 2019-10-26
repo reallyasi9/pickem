@@ -1,23 +1,30 @@
-package bts
+package pickem
 
 import (
 	"fmt"
-	"math"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/atgjack/prob"
 )
 
-// PredictionModel describes an object that can predict the probability a given team will defeat another team, or the point spread if those teams were to play.
-type PredictionModel interface {
-	MostLikelyOutcome(*Game) (team Team, prob float64, spread float64)
-	Predict(*Game) (prob float64, spread float64)
+/*GamePredicter describes an object that can predict the probability of win if two teams play each other.
+
+The RelativeLocation argument is relative to the first Team, so a value of Home means the first Team is
+	playing at home while the second team is playing on the road.
+
+The returned probability is relative to the first Team argument, so a probability of .9 means the first Team
+	has a 90% probability of win and the second Team has a 10% probability of win.
+
+The returned spread is positive if the first Team is predicted to win, negative if the second Team is predicted
+	to win, and zero if there is no favorite.*/
+type GamePredicter interface {
+	Predict(Team, Team, RelativeLocation) (prob float64, spread float64, err error)
 }
 
-// GaussianSpreadModel implements PredictionModel and uses a normal distribution based on spreads to calculate win probabilities.
-// The spread is determined by a team rating and where the game is being played (to account for bias).
+/*GaussianSpreadModel implements GamePredicter and uses a normal distribution based on spreads to calculate
+win probabilities.
+
+The spread is determined by team rating difference and where the game is being played (to account for bias).*/
 type GaussianSpreadModel struct {
 	dist      prob.Normal
 	homeBias  float64
@@ -25,43 +32,43 @@ type GaussianSpreadModel struct {
 	ratings   map[Team]float64
 }
 
-// NewGaussianSpreadModel makes a model.
+/*NewGaussianSpreadModel makes a model.
+Note that positive homeBias and closeBias are points added to the home/close team's predicted spread.*/
 func NewGaussianSpreadModel(ratings map[Team]float64, stdDev, homeBias, closeBias float64) *GaussianSpreadModel {
 	return &GaussianSpreadModel{ratings: ratings, dist: prob.Normal{Mu: 0, Sigma: stdDev}, homeBias: homeBias, closeBias: closeBias}
 }
 
 // Predict returns the probability and spread for team1.
-func (m GaussianSpreadModel) Predict(game *Game) (float64, float64) {
-	if game.Team(0) == BYE || game.Team(1) == BYE {
-		return 0., 0.
+func (m *GaussianSpreadModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float64, error) {
+	if t2 == BYE || t2 == NONE {
+		// The first team has a bye week, so wins automatically.
+		return 1., 0., nil
 	}
-	if game.Team(0) == NONE || game.Team(1) == NONE {
-		return 1., 0.
+	if t1 == BYE || t1 == NONE {
+		// The second team has a bye week, so wins automatically.
+		return 0., 0., nil
 	}
-	spread := m.spread(game)
+	spread, err := m.spread(t1, t2, loc)
+	if err != nil {
+		return 0., 0., fmt.Errorf("Predict failed to calculate spread: %v", err)
+	}
 	prob := m.dist.Cdf(spread)
 
-	return prob, spread
+	return prob, spread, nil
 }
 
-// MostLikelyOutcome returns the most likely team to win a given game, the probability of win, and the predicted spread.
-func (m GaussianSpreadModel) MostLikelyOutcome(game *Game) (Team, float64, float64) {
-	if game.Team(0) == BYE || game.Team(1) == BYE {
-		return BYE, 0., 0.
+func (m GaussianSpreadModel) spread(t1, t2 Team, loc RelativeLocation) (float64, error) {
+	r1, ok := m.ratings[t1]
+	if !ok {
+		return 0., fmt.Errorf("team 1 '%s' has no rating", t1.Name())
 	}
-	if game.Team(0) == NONE || game.Team(1) == NONE {
-		return NONE, 1., 0.
+	r2, ok := m.ratings[t1]
+	if !ok {
+		return 0., fmt.Errorf("team 2 '%s' has no rating", t2.Name())
 	}
-	prob, spread := m.Predict(game)
-	if spread < 0 {
-		return game.Team(1), 1 - prob, -spread
-	}
-	return game.Team(0), prob, spread
-}
 
-func (m GaussianSpreadModel) spread(game *Game) float64 {
-	diff := m.ratings[game.Team(0)] - m.ratings[game.Team(1)]
-	switch game.LocationRelativeToTeam(0) {
+	diff := r1 - r2
+	switch loc {
 	case Home:
 		diff += m.homeBias
 	case Near:
@@ -71,73 +78,85 @@ func (m GaussianSpreadModel) spread(game *Game) float64 {
 	case Away:
 		diff -= m.homeBias
 	}
-	return diff
+	return diff, nil
 }
 
-// MakeGaussianSpreadModel makes a spread model by parsing Sagarin ratings and performance to date metrics.
-func MakeGaussianSpreadModel(ratingsURL, performanceURL, modelName string) (*GaussianSpreadModel, error) {
-	body, err := getURLBody(ratingsURL)
-	if err != nil {
-		return nil, err
-	}
-
-	edgeRegex := regexp.MustCompile("HOME ADVANTAGE=.*?\\[<font color=\"#0000ff\">\\s*([\\-0-9.]+)")
-	edgeMatch := edgeRegex.FindStringSubmatch(string(body))
-	if edgeMatch == nil {
-		return nil, fmt.Errorf("unable to parse home advantage from %s", ratingsURL)
-	}
-	edge, err := strconv.ParseFloat(edgeMatch[1], 64)
-	if err != nil {
-		return nil, err
-	}
-
-	ratingsRegex := regexp.MustCompile("<font color=\"#000000\">\\s+\\d+\\s+(.*?)\\s+[A]+\\s*=<.*?<font color=\"#0000ff\">\\s*([\\-0-9.]+)")
-	ratingsStr := ratingsRegex.FindAllStringSubmatch(string(body), -1)
-	if ratingsStr == nil {
-		return nil, fmt.Errorf("unable to parse any ratings from %s", ratingsURL)
-	}
-
-	ratings := make(map[Team]float64)
-	for _, matches := range ratingsStr {
-		rval, err := strconv.ParseFloat(matches[2], 64)
-		if err != nil {
-			return nil, err
-		}
-		ratings[Team{Name4: matches[1]}] = rval
-	}
-
-	bias, std, err := scrapeParameters(performanceURL, modelName)
-	if err != nil {
-		return nil, err
-	}
-
-	homeBias := edge + bias
-	closeBias := (edge + bias) / 2.
-
-	return NewGaussianSpreadModel(ratings, std, homeBias, closeBias), nil
+// A matchup is just a way to store two teams in a lookup table and allow fast searching by teams in either order.
+type matchup struct {
+	team1 Team
+	team2 Team
 }
 
-func scrapeParameters(url string, modelName string) (float64, float64, error) {
-	body, err := getURLBody(url)
-	if err != nil {
-		return 0., 0., err
+// A matchupMap allows searching for matchup spreads with teams in either order.
+type matchupMap map[matchup]float64
+
+// Get searches for a matchup in the matchupMap
+func (mm matchupMap) get(t1, t2 Team) (spread float64, swap bool, ok bool) {
+	m := matchup{t1, t2}
+	if spread, ok = mm[m]; ok {
+		return
+	}
+	m = matchup{t2, t1}
+	if spread, ok = mm[m]; ok {
+		swap = true
+		return
+	}
+	return
+}
+
+/*LookupModel implements GamePredicter and uses a simple lookup table to calculate spreads and a gaussian model
+to calculate win probabilities.*/
+type LookupModel struct {
+	dist      prob.Normal
+	homeBias  float64
+	closeBias float64
+	spreads   matchupMap
+}
+
+// NewLookupModel makes a model.
+func NewLookupModel(homeTeams, roadTeams []Team, spreads []float64, stdDev, homeBias, closeBias float64) *LookupModel {
+	if len(homeTeams) != len(roadTeams) || len(homeTeams) != len(spreads) {
+		panic(fmt.Errorf("mismatched length of home (%d), road (%d), and spread (%d) slices", len(homeTeams), len(roadTeams), len(spreads)))
+	}
+	mm := make(matchupMap)
+	for i := 0; i < len(homeTeams); i++ {
+		mm[matchup{homeTeams[i], roadTeams[i]}] = spreads[i]
+	}
+	return &LookupModel{spreads: mm, dist: prob.Normal{Mu: 0, Sigma: stdDev}, homeBias: homeBias, closeBias: closeBias}
+}
+
+// Predict returns the probability and spread for team1.
+func (m *LookupModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float64, error) {
+	if t2 == BYE || t2 == NONE {
+		// The first team has a bye week, so wins automatically.
+		return 1., 0., nil
+	}
+	if t1 == BYE || t1 == NONE {
+		// The second team has a bye week, so wins automatically.
+		return 0., 0., nil
+	}
+	spread, swap, ok := m.spreads.get(t1, t2)
+	if !ok {
+		return 0., 0., fmt.Errorf("spread between teams %s and %s not found", t1.Name(), t2.Name())
+	}
+	if swap {
+		spread = -spread
+		loc = -loc
+	}
+	switch loc {
+	case Home:
+		spread += m.homeBias
+	case Near:
+		spread += m.closeBias
+	case Far:
+		spread -= m.closeBias
+	case Away:
+		spread -= m.homeBias
 	}
 
-	perfRegex := regexp.MustCompile(fmt.Sprintf("%s</font>.*?<font size=2>[\\-0-9.]*</font>.*?<font size=2>[\\-0-9.]*</font>.*?<font size=2>[\\-0-9.]*</font>.*?<font size=2>([\\-0-9.]+)</font>.*?<font size=2>([\\-0-9.]+)</font>", regexp.QuoteMeta(modelName)))
-	perfStr := perfRegex.FindSubmatch(body)
-	if perfStr == nil {
-		return 0., 0., fmt.Errorf("unable to parse bais and mean squared error for model \"%s\" from \"%s\"", modelName, url)
-	}
-	bias, err := strconv.ParseFloat(string(perfStr[1]), 64)
-	if err != nil {
-		return 0., 0., err
-	}
-	mse, err := strconv.ParseFloat(string(perfStr[2]), 64)
-	if err != nil {
-		return 0., 0., err
-	}
-	std := math.Sqrt(mse - bias*bias)
-	return bias, std, nil
+	prob := m.dist.Cdf(spread)
+
+	return prob, spread, nil
 }
 
 func (m GaussianSpreadModel) String() string {

@@ -1,6 +1,11 @@
-package bts
+package pickem
 
 import "fmt"
+
+/*Predictable is an interface that returns a prediction if given a GamePredicter.  Games implement Predictable. */
+type Predictable interface {
+	Predict(GamePredicter) (prob float64, spread float64, err error)
+}
 
 // RelativeLocation describes where a game is being played relative to one team's home field.
 type RelativeLocation int
