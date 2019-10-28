@@ -2,7 +2,6 @@ package pickem
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/atgjack/prob"
 )
@@ -40,13 +39,13 @@ func NewGaussianSpreadModel(ratings map[Team]float64, stdDev, homeBias, closeBia
 
 // Predict returns the probability and spread for team1.
 func (m *GaussianSpreadModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float64, error) {
-	if t2 == NONE {
-		// The first team has a bye week, so wins automatically.
-		return 1., 0., nil
-	}
 	if t1 == NONE {
 		// The second team has a bye week, so wins automatically.
 		return 0., 0., nil
+	}
+	if t2 == NONE {
+		// The first team has a bye week, so wins automatically.
+		return 1., 0., nil
 	}
 	spread, err := m.spread(t1, t2, loc)
 	if err != nil {
@@ -127,13 +126,13 @@ func NewLookupModel(homeTeams, roadTeams []Team, spreads []float64, stdDev, home
 
 // Predict returns the probability and spread for team1.
 func (m *LookupModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float64, error) {
-	if t2 == BYE || t2 == NONE {
-		// The first team has a bye week, so wins automatically.
-		return 1., 0., nil
-	}
-	if t1 == BYE || t1 == NONE {
+	if t1 == NONE {
 		// The second team has a bye week, so wins automatically.
 		return 0., 0., nil
+	}
+	if t2 == NONE {
+		// The first team has a bye week, so wins automatically.
+		return 1., 0., nil
 	}
 	spread, swap, ok := m.spreads.get(t1, t2)
 	if !ok {
@@ -157,13 +156,4 @@ func (m *LookupModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float
 	prob := m.dist.Cdf(spread)
 
 	return prob, spread, nil
-}
-
-func (m GaussianSpreadModel) String() string {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("home bias: %f; close bias: %f;\n", m.homeBias, m.closeBias))
-	for t, r := range m.ratings {
-		b.WriteString(fmt.Sprintf("%s: %f\n", t, r))
-	}
-	return b.String()
 }
