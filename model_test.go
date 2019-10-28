@@ -12,58 +12,28 @@ func isClose(a, b, epsilon float64) bool {
 	return i == 0 && math.Abs(r) < math.Abs(epsilon)
 }
 
-func TestGaussianSpreadModelPredict(t *testing.T) {
+func isDarnClose(a, b float64) bool {
+	n := math.Nextafter(a, b)
+	if a > b {
+		return n <= b
+	}
+	return n >= b
+}
 
+func TestGaussianSpreadModel_Predict(t *testing.T) {
 	rm := make(map[Team]float64)
 	rm[Team{"A"}] = 0.
 	rm[Team{"B"}] = 1.
 	rm[BYE] = -100.
 
-	gsm := NewGaussianSpreadModel(rm, 12., 2., 1.)
+	winBy1sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(1)
+	winBy2sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(2)
+	// winBy3sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(3)
 
-	tests := []struct {
-		team1  Team
-		team2  Team
-		loc    RelativeLocation
-		prob   float64
-		spread float64
-		fail   bool
-	}{
-		{Team{"A"}, Team{"B"}, Neutral, .466793, -1., false},
-		{Team{"A"}, Team{"B"}, Home, .533207, 1., false},
-		{Team{"A"}, Team{"B"}, Away, .401294, -3., false},
-		{Team{"A"}, Team{"B"}, Near, .5, 0., false},
-		{Team{"A"}, Team{"B"}, Far, .433816, -2., false},
+	winBy1sigma1 := prob.Normal{Mu: 0, Sigma: 1}.Cdf(1)
+	// winBy2sigma1 := prob.Normal{Mu: 0, Sigma: 1}.Cdf(2)
+	// winBy3sigma1 := prob.Normal{Mu: 0, Sigma: 1}.Cdf(3)
 
-		{Team{"B"}, Team{"A"}, Far, .5, 0., false},
-
-		{Team{}, Team{"B"}, Neutral, 0., 0., false},
-		{Team{"A"}, Team{}, Neutral, 1., 0., false},
-
-		{Team{"A"}, Team{"C"}, Neutral, 0., 0., true},
-		{Team{"Q"}, Team{"B"}, Neutral, 0., 0., true},
-	}
-
-	for _, test := range tests {
-		prob, spread, err := gsm.Predict(test.team1, test.team2, test.loc)
-		if !test.fail && err != nil {
-			t.Errorf("test failed: %v", err)
-			continue
-		}
-		if test.fail && err == nil {
-			t.Error("expected failure, got none")
-			continue
-		}
-		if !isClose(prob, test.prob, 1e-6) {
-			t.Errorf("expected probability %f, got %f", test.prob, prob)
-		}
-		if !isClose(spread, test.spread, 1e-6) {
-			t.Errorf("expected spread %f, got %f", test.spread, spread)
-		}
-	}
-}
-
-func TestGaussianSpreadModel_Predict(t *testing.T) {
 	type fields struct {
 		dist      prob.Normal
 		homeBias  float64
@@ -83,7 +53,46 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 		want1   float64
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{name: "same team neutral",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"A"}, Team{"A"}, Neutral},
+			want:   .5, want1: 0, wantErr: false},
+		{name: "same team near",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"A"}, Team{"A"}, Near},
+			want:   winBy1sigma12, want1: 1., wantErr: false},
+		{name: "same team home",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"A"}, Team{"A"}, Home},
+			want:   winBy2sigma12, want1: 2., wantErr: false},
+		{name: "same team far",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"A"}, Team{"A"}, Far},
+			want:   1 - winBy1sigma12, want1: -1., wantErr: false},
+		{name: "same team away",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"A"}, Team{"A"}, Away},
+			want:   1 - winBy2sigma12, want1: -2., wantErr: false},
+		{name: "rating by -1 neutral",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"A"}, Team{"B"}, Neutral},
+			want:   1 - winBy1sigma12, want1: -1., wantErr: false},
+		{name: "rating by 1 neutral",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"B"}, Team{"A"}, Neutral},
+			want:   winBy1sigma12, want1: 1., wantErr: false},
+		{name: "rating by -1 neutral standard",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"A"}, Team{"B"}, Neutral},
+			want:   1 - winBy1sigma1, want1: -1., wantErr: false},
+		{name: "rating by 1 neutral standard",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"B"}, Team{"A"}, Neutral},
+			want:   winBy1sigma1, want1: 1., wantErr: false},
+		{name: "missing team 1",
+			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
+			args:   args{Team{"Q"}, Team{"B"}, Neutral},
+			want:   0, want1: 0, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -98,10 +107,10 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 				t.Errorf("GaussianSpreadModel.Predict() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if got != tt.want {
+			if !isDarnClose(got, tt.want) {
 				t.Errorf("GaussianSpreadModel.Predict() got = %v, want %v", got, tt.want)
 			}
-			if got1 != tt.want1 {
+			if !isDarnClose(got1, tt.want1) {
 				t.Errorf("GaussianSpreadModel.Predict() got1 = %v, want %v", got1, tt.want1)
 			}
 		})
