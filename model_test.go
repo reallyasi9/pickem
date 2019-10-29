@@ -132,9 +132,9 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 
 func TestLookupModel_Predict(t *testing.T) {
 	mm := make(matchupMap)
-	mm[matchup{Team{"A"}, Team{"B"}}] = -1
-	mm[matchup{Team{"A"}, Team{"C"}}] = 2
-	mm[matchup{Team{"B"}, Team{"C"}}] = 0
+	mm[teamPair{Team{"A"}, Team{"B"}}] = -1
+	mm[teamPair{Team{"A"}, Team{"C"}}] = 2
+	mm[teamPair{Team{"B"}, Team{"C"}}] = 0
 
 	winBy1sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(1)
 	winBy2sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(2)
@@ -243,9 +243,9 @@ func TestLookupModel_Predict(t *testing.T) {
 func TestNewLookupModel(t *testing.T) {
 
 	mm := make(matchupMap)
-	mm[matchup{Team{"A"}, Team{"B"}}] = -1
-	mm[matchup{Team{"A"}, Team{"C"}}] = 2
-	mm[matchup{Team{"B"}, Team{"C"}}] = 0
+	mm[teamPair{Team{"A"}, Team{"B"}}] = -1
+	mm[teamPair{Team{"A"}, Team{"C"}}] = 2
+	mm[teamPair{Team{"B"}, Team{"C"}}] = 0
 	want := &LookupModel{spreads: mm, dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1}
 
 	type args struct {

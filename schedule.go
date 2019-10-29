@@ -9,7 +9,7 @@ import (
 )
 
 // Schedule is a team's schedule for the year.
-type Schedule map[Team][]*Game
+type Schedule map[Team][]*Matchup
 
 // MakeSchedule parses a schedule YAML file.
 func MakeSchedule(fileName string) (*Schedule, error) {
@@ -32,10 +32,10 @@ func MakeSchedule(fileName string) (*Schedule, error) {
 	// }
 	sched := make(Schedule)
 	for team, locteams := range s {
-		sched[team] = make([]*Game, len(locteams))
+		sched[team] = make([]*Matchup, len(locteams))
 		for i, locteam := range locteams {
 			loc, team2 := splitLocTeam(locteam)
-			sched[team][i] = NewGame(team, team2, loc)
+			sched[team][i] = NewMatchup(team, team2, loc)
 		}
 	}
 
@@ -43,10 +43,10 @@ func MakeSchedule(fileName string) (*Schedule, error) {
 }
 
 // Get a game for a team and week number.
-func (s Schedule) Get(t Team, w int) *Game {
+func (s Schedule) Get(t Team, w int) *Matchup {
 	if t == NONE {
 		// Picking no team is strange
-		return &NULLGAME
+		return &NULLMATCHUP
 	}
 	return s[t][w]
 }

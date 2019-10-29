@@ -7,14 +7,14 @@ import (
 	"strconv"
 )
 
-// GameModel is a combined game and model for 2D lookup of lines
-type GameModel struct {
-	Game  *Game
+// MatchupModel is a combined game and model for 2D lookup of lines
+type MatchupModel struct {
+	Game  *Matchup
 	Model string
 }
 
 // LineMap is a mapping of game/model combinations with a line
-type LineMap map[GameModel]float64
+type LineMap map[MatchupModel]float64
 
 // MakeLines makes a map of games to lines
 func MakeLines(url string) (LineMap, error) {
@@ -43,11 +43,11 @@ func MakeLines(url string) (LineMap, error) {
 			return nil, err
 		}
 
-		game := NewGame(Team{Name4: record[0]}, Team{Name4: record[1]}, Neutral)
+		game := NewMatchup(Team{Name4: record[0]}, Team{Name4: record[1]}, Neutral)
 
 		for i, line := range record[2:len(record)] {
 			model := models[i]
-			gm := GameModel{Game: game, Model: model}
+			gm := MatchupModel{Game: game, Model: model}
 
 			val, err := strconv.ParseFloat(line, 64)
 			if err != nil {

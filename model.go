@@ -6,7 +6,7 @@ import (
 	"github.com/atgjack/prob"
 )
 
-/*GamePredicter describes an object that can predict the probability of win if two teams play each other.
+/*MatchupPredicter describes an object that can predict the probability of win if two teams play each other.
 
 The RelativeLocation argument is relative to the first Team, so a value of Home means the first Team is
 	playing at home while the second team is playing on the road.
@@ -16,7 +16,7 @@ The returned probability is relative to the first Team argument, so a probabilit
 
 The returned spread is positive if the first Team is predicted to win, negative if the second Team is predicted
 	to win, and zero if there is no favorite.*/
-type GamePredicter interface {
+type MatchupPredicter interface {
 	Predict(Team, Team, RelativeLocation) (prob float64, spread float64, err error)
 }
 
@@ -80,26 +80,27 @@ func (m GaussianSpreadModel) spread(t1, t2 Team, loc RelativeLocation) (float64,
 	return diff, nil
 }
 
-// A matchup is just a way to store two teams in a lookup table and allow fast searching by teams in either order.
-type matchup struct {
+// A teamPair is just a way to store two teams in a lookup table and allow fast searching by teams in either order.
+type teamPair struct {
 	team1 Team
 	team2 Team
 }
 
 // A matchupMap allows searching for matchup spreads with teams in either order.
-type matchupMap map[matchup]float64
+type matchupMap map[teamPair]float64
 
 // Get searches for a matchup in the matchupMap
 func (mm matchupMap) get(t1, t2 Team) (spread float64, swap bool, ok bool) {
-	m := matchup{t1, t2}
+	m := teamPair{t1, t2}
 	if spread, ok = mm[m]; ok {
 		return
 	}
-	m = matchup{t2, t1}
+	m = teamPair{t2, t1}
 	if spread, ok = mm[m]; ok {
 		swap = true
 		return
 	}
+	// Not found.  That's a shame.
 	return
 }
 
@@ -117,9 +118,9 @@ func NewLookupModel(homeTeams, roadTeams []Team, spreads []float64, stdDev, home
 	if len(homeTeams) != len(roadTeams) || len(homeTeams) != len(spreads) {
 		panic(fmt.Errorf("mismatched length of home (%d), road (%d), and spread (%d) slices", len(homeTeams), len(roadTeams), len(spreads)))
 	}
-	mm := make(matchupMap)
+	mm := make(map[teamPair]float64)
 	for i := 0; i < len(homeTeams); i++ {
-		mm[matchup{homeTeams[i], roadTeams[i]}] = spreads[i]
+		mm[teamPair{homeTeams[i], roadTeams[i]}] = spreads[i]
 	}
 	return &LookupModel{spreads: mm, dist: prob.Normal{Mu: 0, Sigma: stdDev}, homeBias: homeBias, closeBias: closeBias}
 }
@@ -140,7 +141,6 @@ func (m *LookupModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float
 	}
 	if swap {
 		spread = -spread
-		loc = -loc
 	}
 	switch loc {
 	case Home:
