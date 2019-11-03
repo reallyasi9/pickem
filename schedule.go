@@ -1,139 +1,89 @@
 package pickem
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"strings"
 
-	yaml "gopkg.in/yaml.v2"
+	"cloud.google.com/go/firestore"
 )
 
-// Schedule is a team's schedule for the year.
-type Schedule map[Team][]*Matchup
+// TeamSchedule is a Team's schedule for a Season.
+type TeamSchedule struct {
+	Team      *firestore.DocumentRef   `json:"team",firestore:"team"`
+	Opponents []*firestore.DocumentRef `json:"opponents",firestore:"opponents"`
+	Locations []RelativeLocation       `json:"locations",firestore:"locations"`
+}
 
-// MakeSchedule parses a schedule YAML file.
-func MakeSchedule(fileName string) (*Schedule, error) {
+// Schedule is a complete schedule for all teams for a Season.
+type Schedule struct {
+	Season    *firestore.DocumentRef `json:"season",firestore:"season"`
+	Schedules []TeamSchedule         `json:"schedules",firestore:"schedules"`
+}
 
-	schedYaml, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		return nil, err
+// Matchups converts a TeamSchedule into Matchups.
+func (ts *TeamSchedule) Matchups(ctx context.Context, fs *firestore.Client) ([]*Matchup, error) {
+	if len(ts.Opponents) != len(ts.Locations) {
+		return nil, fmt.Errorf("opponents and locations must be the same length")
 	}
-
-	s := make(map[Team][]string)
-	err = yaml.Unmarshal(schedYaml, s)
+	teamDoc, err := ts.Team.Get(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to get team %s from firestore: %v", ts.Team.ID, err)
 	}
-
-	// for k, v := range s {
-	// 	if len(v) != NGames {
-	// 		return nil, fmt.Errorf("schedule for team %s incorrect: expected %d, got %d", k, NGames, len(v))
-	// 	}
-	// }
-	sched := make(Schedule)
-	for team, locteams := range s {
-		sched[team] = make([]*Matchup, len(locteams))
-		for i, locteam := range locteams {
-			loc, team2 := splitLocTeam(locteam)
-			sched[team][i] = NewMatchup(team, team2, loc)
+	var t1 Team
+	err = teamDoc.DataTo(&t1)
+	if err != nil {
+		return nil, fmt.Errorf("unable to unmarshal team %s: %v", ts.Team.ID, err)
+	}
+	oppDocs, err := fs.GetAll(ctx, ts.Opponents)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get opponents from firestore: %v", err)
+	}
+	mus := make([]*Matchup, len(oppDocs))
+	for i, doc := range oppDocs {
+		var t2 Team
+		err = doc.DataTo(&t2)
+		if err != nil {
+			return nil, fmt.Errorf("unable to unmarshal team %s: %v", doc.Ref.ID, err)
 		}
+		mus[i] = &Matchup{team1: &t1, team2: &t2, location: ts.Locations[i]}
 	}
-
-	return &sched, nil
+	return mus, nil
 }
 
-// Get a game for a team and week number.
-func (s Schedule) Get(t Team, w int) *Matchup {
-	if t == NONE {
-		// Picking no team is strange
-		return &NULLMATCHUP
+// MatchupMap converts a Schedule into a team => Matchup map.
+func (s *Schedule) MatchupMap(ctx context.Context, fs *firestore.Client) (map[*Team][]*Matchup, error) {
+	mm := make(map[*Team][]*Matchup)
+
+	for _, ts := range s.Schedules {
+		mus, err := ts.Matchups(ctx, fs)
+		if err != nil {
+			return nil, err
+		}
+		if len(mus) == 0 {
+			continue
+		}
+		t1 := mus[0].team1
+		if _, ok := mm[t1]; ok {
+			return nil, fmt.Errorf("team %s appears more than once in schedules for season %s", t1.Name(), s.Season.ID)
+		}
+		mm[t1] = mus
 	}
-	return s[t][w]
+
+	return mm, nil
 }
 
-// NumWeeks returns the number of weeks contained in the schedule.
-func (s Schedule) NumWeeks() int {
-	for _, v := range s {
-		return len(v)
-	}
-	return 0
-}
-
-// FilterWeeks filters the Predictions by removing weeks prior to the given one.
-func (s *Schedule) FilterWeeks(w int) {
-	if w <= 0 {
-		return
-	}
-	for team := range *s {
-		(*s)[team] = (*s)[team][w:]
-	}
-}
-
-// TeamList generates a list of first-level teams from the schedule.
-func (s Schedule) TeamList() TeamList {
-	tl := make(TeamList, len(s))
-	i := 0
-	for t := range s {
-		tl[i] = t
-		i++
-	}
-	return tl
-}
-
-func splitLocTeam(locTeam string) (RelativeLocation, Team) {
-	if locTeam == "BYE" || locTeam == "" {
-		return Neutral, BYE
-	}
+func loc(locTeam string) RelativeLocation {
 	// Note: this is relative to the schedule team, not the team given here.
 	switch locTeam[0] {
 	case '@':
-		return Away, Team{Name4: locTeam[1:]}
+		return Away
 	case '>':
-		return Far, Team{Name4: locTeam[1:]}
+		return Far
 	case '<':
-		return Near, Team{Name4: locTeam[1:]}
+		return Near
 	case '!':
-		return Neutral, Team{Name4: locTeam[1:]}
+		return Neutral
 	default:
-		return Home, Team{Name4: locTeam}
+		return Home
 	}
-}
-
-func (s Schedule) String() string {
-	tl := s.TeamList()
-	nW := s.NumWeeks()
-	var b strings.Builder
-
-	b.WriteString("      ")
-	for week := 0; week < nW; week++ {
-		b.WriteString(fmt.Sprintf("%-5d ", week))
-	}
-	b.WriteString("\n")
-
-	for _, team := range tl {
-		b.WriteString(fmt.Sprintf("%4s: ", team.Name()))
-		for week := 0; week < nW; week++ {
-			g := s.Get(team, week)
-			extra := ' '
-			switch g.LocationRelativeToTeam(0) {
-			case Away:
-				extra = '@'
-			case Far:
-				extra = '>'
-			case Near:
-				extra = '<'
-			case Neutral:
-				extra = '!'
-			}
-			if g.Team(1) != BYE {
-				b.WriteRune(extra)
-			} else {
-				b.WriteRune(' ')
-			}
-			b.WriteString(fmt.Sprintf("%-4s ", g.Team(1).Name()))
-		}
-		b.WriteString("\n")
-	}
-
-	return b.String()
 }

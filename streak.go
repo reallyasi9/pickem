@@ -7,7 +7,7 @@ import (
 
 // Streak represents a potential streak selection for a contestant.
 type Streak struct {
-	weeks []TeamList
+	weeks [][]*Team
 }
 
 // NewStreak creates a Streak from a list of teams, a selected number of picks per week, and a permutation of the teams into the week.

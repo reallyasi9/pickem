@@ -1,7 +1,5 @@
 package pickem
 
-import "fmt"
-
 /*Predictable is an interface that returns a prediction if given a GamePredicter.  Games implement Predictable. */
 type Predictable interface {
 	Predict(MatchupPredicter) (prob float64, spread float64, err error)
@@ -45,44 +43,20 @@ func (rl RelativeLocation) String() string {
 
 // Matchup represents a matchup between two teams.
 type Matchup struct {
-	team1    Team
-	team2    Team
+	team1    *Team
+	team2    *Team
 	location RelativeLocation
 }
 
-// NULLMATCHUP represents a game that doesn't exsit.  Go figure.
-var NULLMATCHUP = Matchup{}
-
 // NewMatchup makes a game between two teams.
-func NewMatchup(team1, team2 Team, locRelTeam1 RelativeLocation) *Matchup {
+func NewMatchup(team1, team2 *Team, locRelTeam1 RelativeLocation) *Matchup {
 	return &Matchup{team1: team1, team2: team2, location: locRelTeam1}
 }
 
-// Team returns a given team.
-func (g *Matchup) Team(t int) Team {
-	switch t {
-	case 0:
-		return g.team1
-	case 1:
-		return g.team2
-	default:
-		panic(fmt.Errorf("team %d is not a valid team", t))
-	}
-}
-
-// LocationRelativeToTeam returns the location of the game relative to the given team.
-func (g *Matchup) LocationRelativeToTeam(t int) RelativeLocation {
-	switch t {
-	case 0:
+// Location returns the location of the game relative to the given team.
+func (g *Matchup) Location(relToFirstTeam bool) RelativeLocation {
+	if relToFirstTeam {
 		return g.location
-	case 1:
-		return -g.location
-	default:
-		panic(fmt.Errorf("team %d is not a valid team", t))
 	}
-}
-
-// Predict implements Predictable interface.
-func (g *Matchup) Predict(p MatchupPredicter) (prob float64, spread float64, err error) {
-	return p.Predict(g.team1, g.team2, g.location)
+	return -g.location
 }

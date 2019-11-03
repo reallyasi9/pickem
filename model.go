@@ -2,11 +2,12 @@ package pickem
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/atgjack/prob"
 )
 
-/*MatchupPredicter describes an object that can predict the probability of win if two teams play each other.
+/*MatchupPredicter describes an object that can predict the probability of win of a given matchup.
 
 The RelativeLocation argument is relative to the first Team, so a value of Home means the first Team is
 	playing at home while the second team is playing on the road.
@@ -17,7 +18,7 @@ The returned probability is relative to the first Team argument, so a probabilit
 The returned spread is positive if the first Team is predicted to win, negative if the second Team is predicted
 	to win, and zero if there is no favorite.*/
 type MatchupPredicter interface {
-	Predict(Team, Team, RelativeLocation) (prob float64, spread float64, err error)
+	Predict(Matchup) (prob float64, spread float64, err error)
 }
 
 /*GaussianSpreadModel implements GamePredicter and uses a normal distribution based on spreads to calculate
@@ -28,26 +29,33 @@ type GaussianSpreadModel struct {
 	dist      prob.Normal
 	homeBias  float64
 	closeBias float64
-	ratings   map[Team]float64
+	ratings   map[*Team]float64
 }
 
 /*NewGaussianSpreadModel makes a model.
 Note that positive homeBias and closeBias are points added to the home/close team's predicted spread.*/
-func NewGaussianSpreadModel(ratings map[Team]float64, stdDev, homeBias, closeBias float64) *GaussianSpreadModel {
+func NewGaussianSpreadModel(ratings map[*Team]float64, stdDev, homeBias, closeBias float64) *GaussianSpreadModel {
 	return &GaussianSpreadModel{ratings: ratings, dist: prob.Normal{Mu: 0, Sigma: stdDev}, homeBias: homeBias, closeBias: closeBias}
 }
 
-// Predict returns the probability and spread for team1.
-func (m *GaussianSpreadModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float64, error) {
-	if t1 == NONE {
+// Predict returns the probability and spread for team1.  Special cases, in order of precidence:
+// Predict(NONE, NONE, loc): (NaN, NaN, error)
+// Predict(NONE, t2, loc): (0, 0, nil)
+// Predict(t1, NONE, loc): (1, 0, nil)
+func (m *GaussianSpreadModel) Predict(mu Matchup) (float64, float64, error) {
+	if mu.team1 == nil && mu.team2 == nil {
+		// Both teams have a bye week, so the winner is undefined.
+		return math.NaN(), math.NaN(), fmt.Errorf("cannot predict a null game")
+	}
+	if mu.team1 == nil {
 		// The second team has a bye week, so wins automatically.
 		return 0., 0., nil
 	}
-	if t2 == NONE {
+	if mu.team2 == nil {
 		// The first team has a bye week, so wins automatically.
 		return 1., 0., nil
 	}
-	spread, err := m.spread(t1, t2, loc)
+	spread, err := m.spread(mu.team1, mu.team2, mu.location)
 	if err != nil {
 		return 0., 0., fmt.Errorf("Predict failed to calculate spread: %v", err)
 	}
@@ -56,7 +64,7 @@ func (m *GaussianSpreadModel) Predict(t1, t2 Team, loc RelativeLocation) (float6
 	return prob, spread, nil
 }
 
-func (m GaussianSpreadModel) spread(t1, t2 Team, loc RelativeLocation) (float64, error) {
+func (m GaussianSpreadModel) spread(t1, t2 *Team, loc RelativeLocation) (float64, error) {
 	r1, ok := m.ratings[t1]
 	if !ok {
 		return 0., fmt.Errorf("team 1 '%s' has no rating", t1.Name())
@@ -82,15 +90,15 @@ func (m GaussianSpreadModel) spread(t1, t2 Team, loc RelativeLocation) (float64,
 
 // A teamPair is just a way to store two teams in a lookup table and allow fast searching by teams in either order.
 type teamPair struct {
-	team1 Team
-	team2 Team
+	team1 *Team
+	team2 *Team
 }
 
 // A matchupMap allows searching for matchup spreads with teams in either order.
 type matchupMap map[teamPair]float64
 
 // Get searches for a matchup in the matchupMap
-func (mm matchupMap) get(t1, t2 Team) (spread float64, swap bool, ok bool) {
+func (mm matchupMap) get(t1, t2 *Team) (spread float64, swap bool, ok bool) {
 	m := teamPair{t1, t2}
 	if spread, ok = mm[m]; ok {
 		return
@@ -114,7 +122,7 @@ type LookupModel struct {
 }
 
 // NewLookupModel makes a model.
-func NewLookupModel(homeTeams, roadTeams []Team, spreads []float64, stdDev, homeBias, closeBias float64) *LookupModel {
+func NewLookupModel(homeTeams, roadTeams []*Team, spreads []float64, stdDev, homeBias, closeBias float64) *LookupModel {
 	if len(homeTeams) != len(roadTeams) || len(homeTeams) != len(spreads) {
 		panic(fmt.Errorf("mismatched length of home (%d), road (%d), and spread (%d) slices", len(homeTeams), len(roadTeams), len(spreads)))
 	}
@@ -125,32 +133,41 @@ func NewLookupModel(homeTeams, roadTeams []Team, spreads []float64, stdDev, home
 	return &LookupModel{spreads: mm, dist: prob.Normal{Mu: 0, Sigma: stdDev}, homeBias: homeBias, closeBias: closeBias}
 }
 
-// Predict returns the probability and spread for team1.
-func (m *LookupModel) Predict(t1, t2 Team, loc RelativeLocation) (float64, float64, error) {
-	if t1 == NONE {
+// Predict returns the probability and spread for team1.  Special cases, in order of precidence:
+// Predict(NONE, NONE, loc): (NaN, NaN, error)
+// Predict(NONE, t2, loc): (0, 0, nil)
+// Predict(t1, NONE, loc): (1, 0, nil)
+func (m *LookupModel) Predict(mu Matchup) (float64, float64, error) {
+	if mu.team1 == nil && mu.team2 == nil {
+		// Cannot predict a null game.
+		return math.NaN(), math.NaN(), fmt.Errorf("cannot predict null game")
+	}
+	if mu.team1 == nil {
 		// The second team has a bye week, so wins automatically.
 		return 0., 0., nil
 	}
-	if t2 == NONE {
+	if mu.team2 == nil {
 		// The first team has a bye week, so wins automatically.
 		return 1., 0., nil
 	}
-	spread, swap, ok := m.spreads.get(t1, t2)
+	spread, swap, ok := m.spreads.get(mu.team1, mu.team2)
 	if !ok {
-		return 0., 0., fmt.Errorf("spread between teams %s and %s not found", t1.Name(), t2.Name())
+		return 0., 0., fmt.Errorf("spread between teams %s and %s not found", mu.team1.Name(), mu.team2.Name())
 	}
+	mult := 1.
 	if swap {
 		spread = -spread
+		mult = -1.
 	}
-	switch loc {
+	switch mu.location {
 	case Home:
-		spread += m.homeBias
+		spread += m.homeBias * mult
 	case Near:
-		spread += m.closeBias
+		spread += m.closeBias * mult
 	case Far:
-		spread -= m.closeBias
+		spread -= m.closeBias * mult
 	case Away:
-		spread -= m.homeBias
+		spread -= m.homeBias * mult
 	}
 
 	prob := m.dist.Cdf(spread)

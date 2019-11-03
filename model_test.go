@@ -105,7 +105,7 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 		{name: "bye both teams",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
 			args:   args{Team{}, Team{}, Neutral},
-			want:   0, want1: 0, wantErr: false},
+			want:   math.NaN(), want1: math.NaN(), wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -118,6 +118,9 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 			got, got1, err := m.Predict(tt.args.t1, tt.args.t2, tt.args.loc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GaussianSpreadModel.Predict() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
 				return
 			}
 			if !isDarnClose(got, tt.want) {
@@ -215,7 +218,7 @@ func TestLookupModel_Predict(t *testing.T) {
 		{name: "bye both teams",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, spreads: mm},
 			args:   args{Team{}, Team{}, Neutral},
-			want:   0, want1: 0, wantErr: false},
+			want:   math.NaN(), want1: math.NaN(), wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -228,6 +231,9 @@ func TestLookupModel_Predict(t *testing.T) {
 			got, got1, err := m.Predict(tt.args.t1, tt.args.t2, tt.args.loc)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LookupModel.Predict() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
 				return
 			}
 			if !isDarnClose(got, tt.want) {
