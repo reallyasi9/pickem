@@ -5,11 +5,12 @@ package pickem
 // a SchoolName and TeamName are an attempt at a consistent naming scheme determined by the official school and team names published by the schools themselves.
 // Other components of a team are for aesthetic purposes only.
 type Team struct {
-	Names      []string `json:"names",firestore:"names"`
-	SchoolName string   `json:"school_name",firestore:"school_name"`
-	TeamName   string   `json:"team_name",firestore:"team_name"`
-	MascotName string   `json:"mascot_name",firestore:"mascot_name"`
-	Colors     []RGBHex `json:"colors",firestore:"colors"`
+	Names        []string `json:"names",firestore:"names"`
+	Abbreviation string   `json:"abbreviation",firestore:"abbreviation"`
+	SchoolName   string   `json:"school_name",firestore:"school_name"`
+	TeamName     string   `json:"team_name",firestore:"team_name"`
+	Colors       []RGBHex `json:"colors",firestore:"colors"`
+	Logos        []string `json:"logos",firestore:"logos`
 }
 
 // Name implements NameStringer interface.
