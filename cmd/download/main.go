@@ -5,12 +5,9 @@ import (
 	"os"
 )
 
-var commands map[string]func([]string) error
+var commands map[string]func([]string) error = make(map[string]func([]string) error)
 
-func init() {
-	commands = make(map[string]func([]string) error)
-	commands["teams"] = teams
-}
+const apiURL = "https://api.collegefootballdata.com/teams"
 
 func printUsage() {
 	fmt.Println("Usage: download CMD [options...]")
