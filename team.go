@@ -11,6 +11,8 @@ type Team struct {
 	TeamName     string   `json:"team_name",firestore:"team_name"`
 	Colors       []RGBHex `json:"colors",firestore:"colors"`
 	Logos        []string `json:"logos",firestore:"logos`
+	Conference   *string  `json:"conference",firestore:"conference"`
+	Division     *string  `json:"division",firestore:"division"`
 }
 
 // Name implements NameStringer interface.

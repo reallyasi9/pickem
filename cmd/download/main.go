@@ -1,13 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"os"
+
+	"cloud.google.com/go/firestore"
 )
 
-var commands map[string]func([]string) error = make(map[string]func([]string) error)
+var commands map[string]func(context.Context, []string) error = make(map[string]func(context.Context, []string) error)
 
 const apiURL = "https://api.collegefootballdata.com/teams"
+
+var client http.Client
+
+var fs *firestore.Client
 
 func printUsage() {
 	fmt.Println("Usage: download CMD [options...]")
@@ -18,7 +26,19 @@ func printUsage() {
 	}
 }
 
+func init() {
+	client = http.Client{
+		// default
+	}
+	var err error
+	fs, err = firestore.NewClient(context.Background(), os.Getenv("GCP_PROJECT"))
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
+	ctx := context.Background()
 	args := os.Args[1:]
 	if len(args) == 0 {
 		printUsage()
@@ -26,7 +46,7 @@ func main() {
 	}
 	cmd, args := args[0], args[1:]
 	if f, ok := commands[cmd]; ok {
-		err := f(args)
+		err := f(ctx, args)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(-1)
