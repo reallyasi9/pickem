@@ -21,10 +21,16 @@ func isDarnClose(a, b float64) bool {
 	return n >= b
 }
 
+func fakeTeam(name string) *Team {
+	return &Team{Names: []string{name}}
+}
+
 func TestGaussianSpreadModel_Predict(t *testing.T) {
-	rm := make(map[Team]float64)
-	rm[Team{"A"}] = 0.
-	rm[Team{"B"}] = 1.
+	rm := make(map[*Team]float64)
+	teamA := fakeTeam("A")
+	teamB := fakeTeam("B")
+	rm[teamA] = 0.
+	rm[teamB] = 1.
 
 	winBy1sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(1)
 	winBy2sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(2)
@@ -35,11 +41,11 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 		dist      prob.Normal
 		homeBias  float64
 		closeBias float64
-		ratings   map[Team]float64
+		ratings   map[*Team]float64
 	}
 	type args struct {
-		t1  Team
-		t2  Team
+		t1  *Team
+		t2  *Team
 		loc RelativeLocation
 	}
 	tests := []struct {
@@ -52,59 +58,59 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 	}{
 		{name: "same team neutral",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"A"}, Neutral},
+			args:   args{teamA, teamA, Neutral},
 			want:   .5, want1: 0, wantErr: false},
 		{name: "same team near",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"A"}, Near},
+			args:   args{teamA, teamA, Near},
 			want:   winBy1sigma12, want1: 1., wantErr: false},
 		{name: "same team home",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"A"}, Home},
+			args:   args{teamA, teamA, Home},
 			want:   winBy2sigma12, want1: 2., wantErr: false},
 		{name: "same team far",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"A"}, Far},
+			args:   args{teamA, teamA, Far},
 			want:   1 - winBy1sigma12, want1: -1., wantErr: false},
 		{name: "same team away",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"A"}, Away},
+			args:   args{teamA, teamA, Away},
 			want:   1 - winBy2sigma12, want1: -2., wantErr: false},
 		{name: "rating by -1 neutral",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"B"}, Neutral},
+			args:   args{teamA, teamB, Neutral},
 			want:   1 - winBy1sigma12, want1: -1., wantErr: false},
 		{name: "rating by 1 neutral",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"B"}, Team{"A"}, Neutral},
+			args:   args{teamB, teamA, Neutral},
 			want:   winBy1sigma12, want1: 1., wantErr: false},
 		{name: "rating by -1 neutral standard",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"B"}, Neutral},
+			args:   args{teamA, teamB, Neutral},
 			want:   1 - winBy1sigma1, want1: -1., wantErr: false},
 		{name: "rating by 1 neutral standard",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"B"}, Team{"A"}, Neutral},
+			args:   args{teamB, teamA, Neutral},
 			want:   winBy1sigma1, want1: 1., wantErr: false},
 		{name: "missing team 1",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"Q"}, Team{"B"}, Neutral},
+			args:   args{fakeTeam("Q"), teamB, Neutral},
 			want:   0, want1: 0, wantErr: true},
 		{name: "missing team 2",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{"Z"}, Neutral},
+			args:   args{teamA, fakeTeam("Z"), Neutral},
 			want:   0, want1: 0, wantErr: true},
 		{name: "bye team 1",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{}, Team{"B"}, Neutral},
+			args:   args{nil, teamB, Neutral},
 			want:   0, want1: 0, wantErr: false},
 		{name: "bye team 2",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{"A"}, Team{}, Neutral},
+			args:   args{teamA, nil, Neutral},
 			want:   1, want1: 0, wantErr: false},
 		{name: "bye both teams",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, ratings: rm},
-			args:   args{Team{}, Team{}, Neutral},
+			args:   args{nil, nil, Neutral},
 			want:   math.NaN(), want1: math.NaN(), wantErr: true},
 	}
 	for _, tt := range tests {
@@ -115,7 +121,7 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 				closeBias: tt.fields.closeBias,
 				ratings:   tt.fields.ratings,
 			}
-			got, got1, err := m.Predict(tt.args.t1, tt.args.t2, tt.args.loc)
+			got, got1, err := m.Predict(Matchup{tt.args.t1, tt.args.t2, tt.args.loc})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GaussianSpreadModel.Predict() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -135,9 +141,12 @@ func TestGaussianSpreadModel_Predict(t *testing.T) {
 
 func TestLookupModel_Predict(t *testing.T) {
 	mm := make(matchupMap)
-	mm[teamPair{Team{"A"}, Team{"B"}}] = -1
-	mm[teamPair{Team{"A"}, Team{"C"}}] = 2
-	mm[teamPair{Team{"B"}, Team{"C"}}] = 0
+	teamA := fakeTeam("A")
+	teamB := fakeTeam("B")
+	teamC := fakeTeam("C")
+	mm[teamPair{teamA, teamB}] = -1
+	mm[teamPair{teamA, teamC}] = 2
+	mm[teamPair{teamB, teamC}] = 0
 
 	winBy1sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(1)
 	winBy2sigma12 := prob.Normal{Mu: 0, Sigma: 12}.Cdf(2)
@@ -151,8 +160,8 @@ func TestLookupModel_Predict(t *testing.T) {
 		spreads   matchupMap
 	}
 	type args struct {
-		t1  Team
-		t2  Team
+		t1  *Team
+		t2  *Team
 		loc RelativeLocation
 	}
 	tests := []struct {
@@ -165,59 +174,59 @@ func TestLookupModel_Predict(t *testing.T) {
 	}{
 		{name: "0 neutral",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"B"}, Team{"C"}, Neutral},
+			args:   args{teamB, teamC, Neutral},
 			want:   .5, want1: 0, wantErr: false},
 		{name: "0 near",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"B"}, Team{"C"}, Near},
+			args:   args{teamB, teamC, Near},
 			want:   winBy1sigma12, want1: 1, wantErr: false},
 		{name: "0 home",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"B"}, Team{"C"}, Home},
+			args:   args{teamB, teamC, Home},
 			want:   winBy2sigma12, want1: 2, wantErr: false},
 		{name: "0 far",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"B"}, Team{"C"}, Far},
+			args:   args{teamB, teamC, Far},
 			want:   1 - winBy1sigma12, want1: -1, wantErr: false},
 		{name: "0 away",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"B"}, Team{"C"}, Away},
+			args:   args{teamB, teamC, Away},
 			want:   1 - winBy2sigma12, want1: -2, wantErr: false},
 		{name: "1 neutral",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"A"}, Team{"B"}, Neutral},
+			args:   args{teamA, teamB, Neutral},
 			want:   1 - winBy1sigma12, want1: -1, wantErr: false},
 		{name: "2 neutral",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"A"}, Team{"C"}, Neutral},
+			args:   args{teamA, teamC, Neutral},
 			want:   winBy2sigma12, want1: 2, wantErr: false},
 		{name: "1 standard",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"A"}, Team{"B"}, Neutral},
+			args:   args{teamA, teamB, Neutral},
 			want:   1 - winBy1sigma1, want1: -1, wantErr: false},
 		{name: "1 neutral swap",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"B"}, Team{"A"}, Neutral},
+			args:   args{teamB, teamA, Neutral},
 			want:   winBy1sigma12, want1: 1, wantErr: false},
 		{name: "0 near swap",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"C"}, Team{"B"}, Near},
+			args:   args{teamC, teamB, Near},
 			want:   1 - winBy1sigma12, want1: -1, wantErr: false},
 		{name: "missing game",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"A"}, Team{"Z"}, Neutral},
+			args:   args{teamA, fakeTeam("Z"), Neutral},
 			want:   0, want1: 0, wantErr: true},
 		{name: "bye team 1",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{}, Team{"B"}, Neutral},
+			args:   args{nil, teamB, Neutral},
 			want:   0, want1: 0, wantErr: false},
 		{name: "bye team 2",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{"A"}, Team{}, Neutral},
+			args:   args{teamA, nil, Neutral},
 			want:   1, want1: 0, wantErr: false},
 		{name: "bye both teams",
 			fields: fields{dist: prob.Normal{Mu: 0, Sigma: 1}, homeBias: 2, closeBias: 1, spreads: mm},
-			args:   args{Team{}, Team{}, Neutral},
+			args:   args{nil, nil, Neutral},
 			want:   math.NaN(), want1: math.NaN(), wantErr: true},
 	}
 	for _, tt := range tests {
@@ -228,7 +237,7 @@ func TestLookupModel_Predict(t *testing.T) {
 				closeBias: tt.fields.closeBias,
 				spreads:   tt.fields.spreads,
 			}
-			got, got1, err := m.Predict(tt.args.t1, tt.args.t2, tt.args.loc)
+			got, got1, err := m.Predict(Matchup{tt.args.t1, tt.args.t2, tt.args.loc})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LookupModel.Predict() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -249,14 +258,17 @@ func TestLookupModel_Predict(t *testing.T) {
 func TestNewLookupModel(t *testing.T) {
 
 	mm := make(matchupMap)
-	mm[teamPair{Team{"A"}, Team{"B"}}] = -1
-	mm[teamPair{Team{"A"}, Team{"C"}}] = 2
-	mm[teamPair{Team{"B"}, Team{"C"}}] = 0
+	teamA := fakeTeam("A")
+	teamB := fakeTeam("B")
+	teamC := fakeTeam("C")
+	mm[teamPair{teamA, teamB}] = -1
+	mm[teamPair{teamA, teamC}] = 2
+	mm[teamPair{teamB, teamC}] = 0
 	want := &LookupModel{spreads: mm, dist: prob.Normal{Mu: 0, Sigma: 12}, homeBias: 2, closeBias: 1}
 
 	type args struct {
-		homeTeams []Team
-		roadTeams []Team
+		homeTeams []*Team
+		roadTeams []*Team
 		spreads   []float64
 		stdDev    float64
 		homeBias  float64
@@ -268,8 +280,8 @@ func TestNewLookupModel(t *testing.T) {
 		want *LookupModel
 	}{
 		{"basic", args{
-			homeTeams: []Team{Team{"A"}, Team{"A"}, Team{"B"}},
-			roadTeams: []Team{Team{"B"}, Team{"C"}, Team{"C"}},
+			homeTeams: []*Team{teamA, teamA, teamB},
+			roadTeams: []*Team{teamB, teamC, teamC},
 			spreads:   []float64{-1, 2, 0},
 			stdDev:    12, homeBias: 2, closeBias: 1},
 			want,
@@ -289,18 +301,20 @@ func TestNewLookupModel(t *testing.T) {
 			t.Errorf("The code did not panic")
 		}
 	}()
-	NewLookupModel([]Team{Team{"A"}}, []Team{Team{"A"}, Team{"B"}}, []float64{1}, 12, 2, 1)
+	NewLookupModel([]*Team{teamA}, []*Team{teamA, teamB}, []float64{1}, 12, 2, 1)
 }
 
 func TestNewGaussianSpreadModel(t *testing.T) {
-	rm := make(map[Team]float64)
-	rm[Team{"A"}] = 0.
-	rm[Team{"B"}] = 1.
+	rm := make(map[*Team]float64)
+	teamA := fakeTeam("A")
+	teamB := fakeTeam("B")
+	rm[teamA] = 0.
+	rm[teamB] = 1.
 
 	want := &GaussianSpreadModel{prob.Normal{Mu: 0, Sigma: 12}, 2, 1, rm}
 
 	type args struct {
-		ratings   map[Team]float64
+		ratings   map[*Team]float64
 		stdDev    float64
 		homeBias  float64
 		closeBias float64

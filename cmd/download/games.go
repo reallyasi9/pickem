@@ -22,6 +22,7 @@ var gamesWeekFlag int
 var gamesTeamFlag string
 var gamesConferenceFlag string
 var gamesSeasonTypeFlag seasonType
+var gamesUpdateTeamVenueFlag bool
 
 type seasonType string
 
@@ -56,6 +57,7 @@ func init() {
 	gamesFlagSet.IntVar(&gamesWeekFlag, "week", 0, "week download filter (starting with 1, any number < 1 will download all weeks in the season)")
 	gamesFlagSet.StringVar(&gamesTeamFlag, "team", "", "team download filter")
 	gamesFlagSet.Var(&gamesSeasonTypeFlag, "type", "season type download filter (regular or postseason)")
+	gamesFlagSet.BoolVar(&gamesUpdateTeamVenueFlag, "updateVenues", false, "update home team venues using game information")
 	gamesFlagSet.BoolVar(&dryRunFlag, "dryrun", false, "download and print actions only (do not upload to Firestore)")
 	gamesFlagSet.BoolVar(&overwriteFlag, "overwrite", false, "overwrite documents in Firestore if they already exist")
 }
@@ -92,10 +94,15 @@ func (g cfbdGame) pickem() (*pickem.Game, error) {
 	pg.ConferenceGame = g.ConferenceGame
 	pg.Attendance = g.Attendance
 	pg.Venue = fs.Collection("xvenues").Doc(strconv.Itoa(g.VenueID))
-	pg.HomeTeam = bySchool[g.HomeTeam]
+	var ok bool
+	if pg.HomeTeam, ok = bySchool[g.HomeTeam]; !ok {
+		return nil, fmt.Errorf("ID of team '%s' not found", g.HomeTeam)
+	}
 	pg.HomePoints = g.HomePoints
 	pg.HomeLineScores = g.HomeLineScores
-	pg.AwayTeam = bySchool[g.AwayTeam]
+	if pg.AwayTeam, ok = bySchool[g.AwayTeam]; !ok {
+		return nil, fmt.Errorf("ID of team '%s' not found", g.AwayTeam)
+	}
 	pg.AwayPoints = g.AwayPoints
 	pg.AwayLineScores = g.AwayLineScores
 
@@ -116,9 +123,12 @@ func fillSchools(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		school, err := doc.DataAt("SchoolName")
+		school, err := doc.DataAt("school_name")
 		if err != nil {
 			return err
+		}
+		if _, ok := bySchool[school.(string)]; ok {
+			return fmt.Errorf("school '%s' appears in data more than once", school.(string))
 		}
 		bySchool[school.(string)] = doc.Ref
 	}
@@ -173,45 +183,77 @@ func games(ctx context.Context, args []string) error {
 		return err
 	}
 
-	toWrite := fs.Batch()
+	toWrite := newFSCommitter(fs, 500)
 	collection := fs.Collection("xgames")
+	byHomeTeam := make(map[*firestore.DocumentRef]*firestore.DocumentRef)
 
-	var i int
 	var g cfbdGame
-	for i, g = range games {
+	for _, g = range games {
 		game, err := g.pickem()
 		if err != nil {
 			return err
 		}
 		ref := collection.Doc(strconv.Itoa(g.ID))
+
+		if gamesUpdateTeamVenueFlag && !g.NeutralSite {
+			if _, ok := byHomeTeam[game.HomeTeam]; ok {
+				fmt.Printf("team %v has multiple home venues\n", game.HomeTeam.ID)
+			}
+			byHomeTeam[game.HomeTeam] = game.Venue
+		}
+
 		if dryRunFlag {
 			fmt.Printf("%s <- %v\n", ref.ID, game)
 			continue
 		}
 
 		if overwriteFlag {
-			toWrite = toWrite.Set(ref, &game)
-		} else {
-			toWrite = toWrite.Create(ref, &game)
-		}
-
-		if i%500 == 499 {
-			_, err := toWrite.Commit(ctx)
-			if err != nil {
+			if err := toWrite.Set(ctx, ref, &game); err != nil {
 				return err
 			}
-			toWrite = fs.Batch()
+		} else {
+			if err := toWrite.Create(ctx, ref, &game); err != nil {
+				return err
+			}
 		}
 	}
 
-	if !dryRunFlag && i%500 != 499 {
-		_, err = toWrite.Commit(ctx)
-		if err != nil {
+	if err := toWrite.Commit(ctx); err != nil {
+		return err
+	}
+
+	if gamesUpdateTeamVenueFlag {
+		itr := fs.Collection("xteams").Documents(ctx)
+		defer itr.Stop()
+		for {
+			doc, err := itr.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			var venue *firestore.DocumentRef
+			var ok bool
+			if venue, ok = byHomeTeam[doc.Ref]; !ok {
+				continue
+			}
+			if dryRunFlag {
+				fmt.Printf("%s <- %s\n", doc.Ref.ID, venue.ID)
+				continue
+			}
+			if err := toWrite.Update(ctx, doc.Ref, []firestore.Update{{Path: "home_venue", Value: venue}}); err != nil {
+				return err
+			}
+		}
+	}
+
+	if !dryRunFlag {
+		if err := toWrite.Commit(ctx); err != nil {
 			return err
 		}
 	}
 
 	return nil
 
-	return nil
 }

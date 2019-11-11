@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/reallyasi9/pickem"
@@ -46,6 +45,7 @@ func (t cfbdTeam) pickem() (*pickem.Team, error) {
 		return nil, fmt.Errorf("team %d missing school name", t.ID)
 	}
 	var team pickem.Team
+	team.ID = t.ID
 	team.Names = make([]string, 0)
 	team.Colors = make([]pickem.RGBHex, 0)
 	team.Logos = t.Logos
@@ -128,40 +128,34 @@ func teams(ctx context.Context, args []string) error {
 		return err
 	}
 
-	toWrite := fs.Batch()
+	toWrite := newFSCommitter(fs, 500)
 	collection := fs.Collection("xteams")
 
-	var i int
 	var t cfbdTeam
-	for i, t = range teams {
+	for _, t = range teams {
 		team, err := t.pickem()
 		if err != nil {
 			return err
 		}
-		ref := collection.Doc(strconv.Itoa(t.ID))
+		ref := collection.Doc(t.School)
 		if dryRunFlag {
 			fmt.Printf("%s <- %v\n", ref.ID, team)
 			continue
 		}
 
 		if overwriteFlag {
-			toWrite = toWrite.Set(ref, &team)
-		} else {
-			toWrite = toWrite.Create(ref, &team)
-		}
-
-		if i%500 == 499 {
-			_, err := toWrite.Commit(ctx)
-			if err != nil {
+			if err := toWrite.Set(ctx, ref, &team); err != nil {
 				return err
 			}
-			toWrite = fs.Batch()
+		} else {
+			if err := toWrite.Create(ctx, ref, &team); err != nil {
+				return err
+			}
 		}
 	}
 
-	if !dryRunFlag && i%500 != 499 {
-		_, err = toWrite.Commit(ctx)
-		if err != nil {
+	if !dryRunFlag {
+		if err := toWrite.Commit(ctx); err != nil {
 			return err
 		}
 	}

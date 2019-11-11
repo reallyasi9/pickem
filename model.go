@@ -43,19 +43,19 @@ func NewGaussianSpreadModel(ratings map[*Team]float64, stdDev, homeBias, closeBi
 // Predict(NONE, t2, loc): (0, 0, nil)
 // Predict(t1, NONE, loc): (1, 0, nil)
 func (m *GaussianSpreadModel) Predict(mu Matchup) (float64, float64, error) {
-	if mu.team1 == nil && mu.team2 == nil {
+	if mu.Team1 == nil && mu.Team2 == nil {
 		// Both teams have a bye week, so the winner is undefined.
 		return math.NaN(), math.NaN(), fmt.Errorf("cannot predict a null game")
 	}
-	if mu.team1 == nil {
+	if mu.Team1 == nil {
 		// The second team has a bye week, so wins automatically.
 		return 0., 0., nil
 	}
-	if mu.team2 == nil {
+	if mu.Team2 == nil {
 		// The first team has a bye week, so wins automatically.
 		return 1., 0., nil
 	}
-	spread, err := m.spread(mu.team1, mu.team2, mu.location)
+	spread, err := m.spread(mu.Team1, mu.Team2, mu.Location)
 	if err != nil {
 		return 0., 0., fmt.Errorf("Predict failed to calculate spread: %v", err)
 	}
@@ -138,28 +138,28 @@ func NewLookupModel(homeTeams, roadTeams []*Team, spreads []float64, stdDev, hom
 // Predict(NONE, t2, loc): (0, 0, nil)
 // Predict(t1, NONE, loc): (1, 0, nil)
 func (m *LookupModel) Predict(mu Matchup) (float64, float64, error) {
-	if mu.team1 == nil && mu.team2 == nil {
+	if mu.Team1 == nil && mu.Team2 == nil {
 		// Cannot predict a null game.
 		return math.NaN(), math.NaN(), fmt.Errorf("cannot predict null game")
 	}
-	if mu.team1 == nil {
+	if mu.Team1 == nil {
 		// The second team has a bye week, so wins automatically.
 		return 0., 0., nil
 	}
-	if mu.team2 == nil {
+	if mu.Team2 == nil {
 		// The first team has a bye week, so wins automatically.
 		return 1., 0., nil
 	}
-	spread, swap, ok := m.spreads.get(mu.team1, mu.team2)
+	spread, swap, ok := m.spreads.get(mu.Team1, mu.Team2)
 	if !ok {
-		return 0., 0., fmt.Errorf("spread between teams %s and %s not found", mu.team1.Name(), mu.team2.Name())
+		return 0., 0., fmt.Errorf("spread between teams %s and %s not found", mu.Team1.Name(), mu.Team2.Name())
 	}
 	mult := 1.
 	if swap {
 		spread = -spread
 		mult = -1.
 	}
-	switch mu.location {
+	switch mu.Location {
 	case Home:
 		spread += m.homeBias * mult
 	case Near:

@@ -9,15 +9,15 @@ import (
 
 // TeamSchedule is a Team's schedule for a Season.
 type TeamSchedule struct {
-	Team      *firestore.DocumentRef   `json:"team",firestore:"team"`
-	Opponents []*firestore.DocumentRef `json:"opponents",firestore:"opponents"`
-	Locations []RelativeLocation       `json:"locations",firestore:"locations"`
+	Team      *firestore.DocumentRef   `json:"team" firestore:"team"`
+	Opponents []*firestore.DocumentRef `json:"opponents" firestore:"opponents"`
+	Locations []RelativeLocation       `json:"locations" firestore:"locations"`
 }
 
 // Schedule is a complete schedule for all teams for a Season.
 type Schedule struct {
-	Season    *firestore.DocumentRef `json:"season",firestore:"season"`
-	Schedules []TeamSchedule         `json:"schedules",firestore:"schedules"`
+	Season    *firestore.DocumentRef `json:"season" firestore:"season"`
+	Schedules []TeamSchedule         `json:"schedules" firestore:"schedules"`
 }
 
 // Matchups converts a TeamSchedule into Matchups.
@@ -45,7 +45,7 @@ func (ts *TeamSchedule) Matchups(ctx context.Context, fs *firestore.Client) ([]*
 		if err != nil {
 			return nil, fmt.Errorf("unable to unmarshal team %s: %v", doc.Ref.ID, err)
 		}
-		mus[i] = &Matchup{team1: &t1, team2: &t2, location: ts.Locations[i]}
+		mus[i] = &Matchup{Team1: &t1, Team2: &t2, Location: ts.Locations[i]}
 	}
 	return mus, nil
 }
@@ -62,7 +62,7 @@ func (s *Schedule) MatchupMap(ctx context.Context, fs *firestore.Client) (map[*T
 		if len(mus) == 0 {
 			continue
 		}
-		t1 := mus[0].team1
+		t1 := mus[0].Team1
 		if _, ok := mm[t1]; ok {
 			return nil, fmt.Errorf("team %s appears more than once in schedules for season %s", t1.Name(), s.Season.ID)
 		}

@@ -54,7 +54,7 @@ func (v cfbdVenue) pickem() (*pickem.Venue, error) {
 		pv.Zip = *v.Zip
 	}
 	pv.YearConstructed = v.YearConstructed
-	pv.HomeTeams = make([]firestore.DocumentRef, 0)
+	pv.HomeTeams = make([]*firestore.DocumentRef, 0)
 
 	if v.Location == nil {
 		return &pv, nil
