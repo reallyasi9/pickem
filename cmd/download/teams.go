@@ -16,13 +16,13 @@ import (
 
 var teamsFlagSet flag.FlagSet
 var teamsConferenceFlag string
-var teamsDryRunFlag bool
 
 func init() {
 	commands["teams"] = teams
 
-	teamsFlagSet.StringVar(&teamsConferenceFlag, "conference", "", "Conference of teams to download")
-	teamsFlagSet.BoolVar(&teamsDryRunFlag, "dryrun", false, "Do not upload to firestore")
+	teamsFlagSet.StringVar(&teamsConferenceFlag, "conference", "", "conference download filter")
+	teamsFlagSet.BoolVar(&dryRunFlag, "dryrun", false, "download and print actions only (do not upload to Firestore)")
+	teamsFlagSet.BoolVar(&overwriteFlag, "overwrite", false, "overwrite documents in Firestore if they already exist")
 }
 
 type cfbdTeam struct {
@@ -90,6 +90,7 @@ func (t cfbdTeam) pickem() (*pickem.Team, error) {
 }
 
 func teams(ctx context.Context, args []string) error {
+	flag.Parse()
 	if err := teamsFlagSet.Parse(args); err != nil {
 		return err
 	}
@@ -98,6 +99,7 @@ func teams(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	u.Path = "/teams"
 
 	q := u.Query()
 	q.Set("conference", teamsConferenceFlag)
@@ -137,11 +139,17 @@ func teams(ctx context.Context, args []string) error {
 			return err
 		}
 		ref := collection.Doc(strconv.Itoa(t.ID))
-		if teamsDryRunFlag {
+		if dryRunFlag {
 			fmt.Printf("%s <- %v\n", ref.ID, team)
 			continue
 		}
-		toWrite = toWrite.Create(ref, &team)
+
+		if overwriteFlag {
+			toWrite = toWrite.Set(ref, &team)
+		} else {
+			toWrite = toWrite.Create(ref, &team)
+		}
+
 		if i%500 == 499 {
 			_, err := toWrite.Commit(ctx)
 			if err != nil {
@@ -151,7 +159,7 @@ func teams(ctx context.Context, args []string) error {
 		}
 	}
 
-	if !teamsDryRunFlag && i%500 != 499 {
+	if !dryRunFlag && i%500 != 499 {
 		_, err = toWrite.Commit(ctx)
 		if err != nil {
 			return err

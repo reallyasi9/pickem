@@ -11,7 +11,7 @@ import (
 
 var commands map[string]func(context.Context, []string) error = make(map[string]func(context.Context, []string) error)
 
-const apiURL = "https://api.collegefootballdata.com/teams"
+const apiURL = "https://api.collegefootballdata.com"
 
 var client http.Client
 
@@ -25,6 +25,9 @@ func printUsage() {
 		fmt.Printf("\t%s\n", key)
 	}
 }
+
+var dryRunFlag bool
+var overwriteFlag bool
 
 func init() {
 	client = http.Client{
