@@ -184,7 +184,7 @@ func games(ctx context.Context, args []string) error {
 		return err
 	}
 
-	toWrite := newFSCommitter(fs, 500)
+	toWrite := newFSCommitter(fs, 250)
 	collection := fs.Collection("xgames")
 	byHomeTeam := make(map[string]*firestore.DocumentRef)
 

@@ -41,7 +41,7 @@ func LookupTeam(ctx context.Context, fs *firestore.Client, name string) (*Team, 
 	var team Team
 
 	doc, err := collection.Doc(name).Get(ctx)
-	if err != nil {
+	if err == nil {
 		if err := doc.DataTo(&team); err != nil {
 			return nil, err
 		}

@@ -2,6 +2,7 @@ package pickem
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 
@@ -28,12 +29,18 @@ func Matchups(ctx context.Context, fs *firestore.Client, team string, season int
 	teamRef := fs.Collection("xteams").Doc(t.SchoolName)
 
 	games := make([]*Game, 0)
+	fmt.Println(seasonRef.Path)
+	fmt.Println(startWeek)
+	fmt.Println(teamRef.Path)
 	homeGameItr := fs.Collection("xgames").Where("season", "==", seasonRef).Where("week", ">=", startWeek).Where("home_team", "==", teamRef).Documents(ctx)
 	defer homeGameItr.Stop()
 	for {
 		doc, err := homeGameItr.Next()
 		if err == iterator.Done {
 			break
+		}
+		if err != nil {
+			return nil, err
 		}
 		var game Game
 		if err := doc.DataTo(&game); err != nil {
@@ -48,6 +55,9 @@ func Matchups(ctx context.Context, fs *firestore.Client, team string, season int
 		doc, err := awayGameItr.Next()
 		if err == iterator.Done {
 			break
+		}
+		if err != nil {
+			return nil, err
 		}
 		var game Game
 		if err := doc.DataTo(&game); err != nil {
