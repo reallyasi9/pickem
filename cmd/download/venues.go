@@ -109,12 +109,11 @@ func venues(ctx context.Context, args []string) error {
 		return err
 	}
 
-	toWrite := fs.Batch()
+	toWrite := newFSCommitter(fs, 500)
 	collection := fs.Collection("xvenues")
 
-	var i int
 	var v cfbdVenue
-	for i, v = range venues {
+	for _, v = range venues {
 		venue, err := v.pickem()
 		if err != nil {
 			return err
@@ -126,23 +125,18 @@ func venues(ctx context.Context, args []string) error {
 		}
 
 		if overwriteFlag {
-			toWrite = toWrite.Set(ref, &venue)
-		} else {
-			toWrite = toWrite.Create(ref, &venue)
-		}
-
-		if i%500 == 499 {
-			_, err := toWrite.Commit(ctx)
-			if err != nil {
+			if err := toWrite.Set(ctx, ref, &venue); err != nil {
 				return err
 			}
-			toWrite = fs.Batch()
+		} else {
+			if err := toWrite.Create(ctx, ref, &venue); err != nil {
+				return err
+			}
 		}
 	}
 
-	if !dryRunFlag && i%500 != 499 {
-		_, err = toWrite.Commit(ctx)
-		if err != nil {
+	if !dryRunFlag {
+		if err := toWrite.Commit(ctx); err != nil {
 			return err
 		}
 	}

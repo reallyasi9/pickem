@@ -185,7 +185,7 @@ func games(ctx context.Context, args []string) error {
 
 	toWrite := newFSCommitter(fs, 500)
 	collection := fs.Collection("xgames")
-	byHomeTeam := make(map[*firestore.DocumentRef]*firestore.DocumentRef)
+	byHomeTeam := make(map[string]*firestore.DocumentRef)
 
 	var g cfbdGame
 	for _, g = range games {
@@ -196,10 +196,10 @@ func games(ctx context.Context, args []string) error {
 		ref := collection.Doc(strconv.Itoa(g.ID))
 
 		if gamesUpdateTeamVenueFlag && !g.NeutralSite {
-			if _, ok := byHomeTeam[game.HomeTeam]; ok {
-				fmt.Printf("team %v has multiple home venues\n", game.HomeTeam.ID)
+			if v, ok := byHomeTeam[game.HomeTeam.ID]; ok && v.ID != game.Venue.ID {
+				fmt.Printf("warning: team %v has multiple home venues\n", game.HomeTeam.ID)
 			}
-			byHomeTeam[game.HomeTeam] = game.Venue
+			byHomeTeam[game.HomeTeam.ID] = game.Venue
 		}
 
 		if dryRunFlag {
@@ -235,7 +235,7 @@ func games(ctx context.Context, args []string) error {
 			}
 			var venue *firestore.DocumentRef
 			var ok bool
-			if venue, ok = byHomeTeam[doc.Ref]; !ok {
+			if venue, ok = byHomeTeam[doc.Ref.ID]; !ok {
 				continue
 			}
 			if dryRunFlag {
