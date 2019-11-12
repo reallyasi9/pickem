@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -197,7 +198,7 @@ func games(ctx context.Context, args []string) error {
 
 		if gamesUpdateTeamVenueFlag && !g.NeutralSite {
 			if v, ok := byHomeTeam[game.HomeTeam.ID]; ok && v.ID != game.Venue.ID {
-				fmt.Printf("warning: team %v has multiple home venues\n", game.HomeTeam.ID)
+				log.Printf("warning: team %v has multiple home venues\n", game.HomeTeam.ID)
 			}
 			byHomeTeam[game.HomeTeam.ID] = game.Venue
 		}
